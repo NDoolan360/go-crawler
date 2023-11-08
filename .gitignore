@@ -1,0 +1,11 @@
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.so
+
+# Compiled Go binary
+*.exe
+*.test
+
+# Dependency directories (remove the ones you don't need)
+/go.sum
