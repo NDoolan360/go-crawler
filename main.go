@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/html"
 )
@@ -34,18 +35,20 @@ func main() {
 
 func startCrawl(startUrl string, maxDepth int) Link {
 	initial := Link{Url: startUrl, Depth: 0, Children: []*Link{}}
-	return crawl(initial, maxDepth)
+	urlQueue := make(chan *Link)
+	crawl(&initial, maxDepth, urlQueue)
+	return initial
 }
 
-func crawl(link Link, maxDepth int) Link {
+func crawl(link *Link, maxDepth int, urlQueue chan *Link) {
 	if link.Depth >= maxDepth {
-		return link
+		return
 	}
 
 	content, err := scrape(link.Url)
 	if err != nil {
 		fmt.Println("Error scraping", link.Url, ":", err)
-		return link
+		return
 	}
 
 	urls, err := extractUrls(content)
@@ -53,12 +56,24 @@ func crawl(link Link, maxDepth int) Link {
 		fmt.Println("Error extracting links from", link.Url, ":", err)
 	}
 
+	var childLinks []*Link
 	for _, url := range urls {
-		newChild := Link{Url: url, Depth: link.Depth + 1, Children: []*Link{}}
-		link.Children = append(link.Children, &newChild)
-		newChild = crawl(newChild, maxDepth)
+		childLink := Link{Url: url, Depth: link.Depth + 1, Children: []*Link{}}
+		childLinks = append(childLinks, &childLink)
 	}
-	return link
+
+	var childWG sync.WaitGroup
+	for _, childLink := range childLinks {
+		childWG.Add(1)
+		go func(childLink *Link) {
+			defer childWG.Done()
+			crawl(childLink, maxDepth, urlQueue)
+		}(childLink)
+	}
+
+	childWG.Wait()
+
+	link.Children = childLinks
 }
 
 func scrape(url string) ([]byte, error) {
