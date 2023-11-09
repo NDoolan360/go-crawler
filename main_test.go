@@ -1,63 +1,71 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
-// TestScrapeAndExtractLinks calls main.scrape with a url, then passes
-// that to main.extractLinks checking for a valid return value.
-func TestScrapeAndExtractLinks(t *testing.T) {
-	content, scrapeErr := scrape("http://quotes.toscrape.com/author/Albert-Einstein/")
-	if scrapeErr != nil {
-		t.Fatalf(`scrape("http://quotes.toscrape.com/author/Albert-Einstein/") = %q, %v`, content, scrapeErr)
+func TestScrapeAndExtractUrls(t *testing.T) {
+	mockServer := createMockServer("<a href='http://example.com'></a><a href='http://example.org'></a>")
+	defer mockServer.Close()
+
+	content, err := scrape(mockServer.URL)
+	if err != nil {
+		t.Fatalf("Error scraping URL %s: %v", mockServer.URL, err)
 	}
 
-	links, parseErr := extractLinks(content)
-
-	want := []string{"https://www.goodreads.com/quotes", "https://www.zyte.com"}
-
-	if parseErr != nil || len(links) != len(want) || links[0] != want[0] {
-		t.Fatalf(`extractLinks(scrape("http://www.example.com")) = %q, %v, want match for %#q, nil`,
-			links, parseErr, want)
+	links, err := extractUrls(content)
+	if err != nil {
+		t.Fatalf("Error extracting links from URL %s: %v", mockServer.URL, err)
 	}
-}
 
-// TestShallowCrawl calls main.crawl with a url and a depth of 1, checking
-// for a valid mutation of VisitedUrls.
-func TestShallowCrawl(t *testing.T) {
-	visitedUrls := startCrawl("http://quotes.toscrape.com/author/Albert-Einstein/", 1)
-
-	want := make(map[string]bool)
-	want["http://quotes.toscrape.com/author/Albert-Einstein/"] = true
-	want["https://www.goodreads.com/quotes"] = false
-	want["https://www.zyte.com"] = false
-
-	fail := false
-	if len(visitedUrls) != len(want) {
-		fail = true
+	expectedLinks := []string{"http://example.com", "http://example.org"}
+	if len(links) != len(expectedLinks) {
+		t.Fatalf("Expected %d links, got %d", len(expectedLinks), len(links))
 	}
-	for key, visitValue := range visitedUrls {
-		wantValue, ok := want[key]
-		if !ok || visitValue != wantValue {
-			fail = true
-			break
+
+	for i, expectedLink := range expectedLinks {
+		if links[i] != expectedLink {
+			t.Errorf("Expected link at index %d to be %s, got %s", i, expectedLink, links[i])
 		}
 	}
-	if fail {
-		t.Fatalf(`crawl("http://quotes.toscrape.com/author/Albert-Einstein/", 1, visitedUrls),
-        did not result in visitedUrls = %#v, instead it was %#v`, want, visitedUrls)
+}
+
+func TestCrawl(t *testing.T) {
+	mockServer3 := createMockServer("<a href='http://example.com'></a>")
+	defer mockServer3.Close()
+	mockServer2 := createMockServer("<a href='" + mockServer3.URL + "'></a>")
+	defer mockServer2.Close()
+	mockServer1 := createMockServer("<a href='" + mockServer2.URL + "'></a>")
+	defer mockServer1.Close()
+
+	maxDepth := 3
+	result := startCrawl(mockServer1.URL, maxDepth)
+
+	expectedUrls := []string{mockServer1.URL, mockServer2.URL, mockServer3.URL, "http://example.com"}
+
+	for index, expectedUrl := range expectedUrls {
+		if result.Url != expectedUrl {
+			t.Errorf("Expected parent URL to be %s, got %s", expectedUrl, result.Url)
+		}
+
+		if index != len(expectedUrls)-1 {
+			break
+		}
+
+		if len(result.Children) != 1 {
+			t.Errorf("Expected parent URL to have 1 child link, got %d", len(result.Children))
+		} else {
+			result = *result.Children[0]
+		}
+
 	}
 }
 
-// TestCrawl calls main.crawl with a url and a depth of 3, checking
-// for a valid mutation of VisitedUrls.
-func TestCrawl(t *testing.T) {
-	visitedUrls := startCrawl("http://www.example.com", 3)
-
-	wantedLen := 105
-
-	if len(visitedUrls) != wantedLen {
-		t.Fatalf(`crawl("http://www.example.com", 3, visitedUrls), did not result in
-        len(visitedUrls) = %#v, instead it was %#v`, wantedLen, len(visitedUrls))
-	}
+func createMockServer(responseBody string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(responseBody))
+	}))
 }

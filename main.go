@@ -13,6 +13,12 @@ import (
 	"golang.org/x/net/html"
 )
 
+type Link struct {
+	Url      string
+	Depth    int
+	Children []*Link
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("This program expects at least 1 string argument.")
@@ -31,38 +37,33 @@ func main() {
 	startCrawl(startUrl, maxDepth)
 }
 
-func startCrawl(startUrl string, maxDepth int) map[string]bool {
-	visitedUrls := make(map[string]bool)
-	crawl(startUrl, maxDepth, visitedUrls)
-	return visitedUrls
+func startCrawl(startUrl string, maxDepth int) Link {
+	initial := Link{Url: startUrl, Depth: 0, Children: []*Link{}}
+	return crawl(initial, maxDepth)
 }
 
-func crawl(url string, depth int, visitedUrls map[string]bool) {
-	if depth <= 0 {
-		return
+func crawl(link Link, maxDepth int) Link {
+	if link.Depth >= maxDepth {
+		return link
 	}
-	fmt.Println("Crawling", url)
 
-	content, err := scrape(url)
+	content, err := scrape(link.Url)
 	if err != nil {
-		fmt.Println("Error scraping", url, ":", err)
-		return
+		fmt.Println("Error scraping", link.Url, ":", err)
+		return link
 	}
 
-	visitedUrls[url] = true
-
-	links, err := extractLinks(content)
+	urls, err := extractUrls(content)
 	if err != nil {
-		fmt.Println("Error extracting links from", url, ":", err)
+		fmt.Println("Error extracting links from", link.Url, ":", err)
 	}
 
-	for _, link := range links {
-		if !visitedUrls[link] {
-			fmt.Println("Found", link)
-			visitedUrls[link] = false
-			crawl(link, depth-1, visitedUrls)
-		}
+	for _, url := range urls {
+		newChild := Link{Url: url, Depth: link.Depth + 1, Children: []*Link{}}
+		link.Children = append(link.Children, &newChild)
+		newChild = crawl(newChild, maxDepth)
 	}
+	return link
 }
 
 func scrape(url string) ([]byte, error) {
@@ -83,7 +84,7 @@ func scrape(url string) ([]byte, error) {
 	return content, nil
 }
 
-func extractLinks(content []byte) ([]string, error) {
+func extractUrls(content []byte) ([]string, error) {
 	var links []string
 	tokenizer := html.NewTokenizer(bytes.NewReader(content))
 
