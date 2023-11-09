@@ -13,12 +13,6 @@ import (
 	"golang.org/x/net/html"
 )
 
-type Link struct {
-	Url      string
-	Depth    int
-	Children []*Link
-}
-
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("This program expects at least 1 string argument.")
@@ -34,7 +28,8 @@ func main() {
 		}
 	}
 
-	startCrawl(startUrl, maxDepth)
+	rootNode := startCrawl(startUrl, maxDepth)
+	fmt.Println(rootNode.toString())
 }
 
 func startCrawl(startUrl string, maxDepth int) Link {
