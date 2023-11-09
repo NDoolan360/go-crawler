@@ -17,7 +17,7 @@ func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("This program expects at least 1 string argument.")
 	}
-	startURL := os.Args[1]
+	startUrl := os.Args[1]
 
 	maxDepth := 1
 	if len(os.Args) >= 3 {
@@ -28,8 +28,13 @@ func main() {
 		}
 	}
 
+	startCrawl(startUrl, maxDepth)
+}
+
+func startCrawl(startUrl string, maxDepth int) map[string]bool {
 	visitedUrls := make(map[string]bool)
-	crawl(startURL, maxDepth, visitedUrls)
+	crawl(startUrl, maxDepth, visitedUrls)
+	return visitedUrls
 }
 
 func crawl(url string, depth int, visitedUrls map[string]bool) {
